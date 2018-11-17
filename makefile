@@ -1,6 +1,6 @@
 all:
-	gcc -o fork eric_fork.c
-	gcc -o select eric_select.c
+	gcc -o fork fork.c
+	gcc -o select select.c
 
 clean:
 	rm fork select
