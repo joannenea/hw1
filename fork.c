@@ -12,7 +12,7 @@
 #include <netdb.h>
 #include <arpa/inet.h>
 
-#define SERV_PORT 80 //這個程式原則上需在port 80 listen
+#define SERV_PORT 7990
 #define BUFFERSIZE 8096
 
 struct
