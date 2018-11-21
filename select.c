@@ -12,7 +12,7 @@
 #include <netdb.h>
 #include <arpa/inet.h>
 
-#define SERV_PORT 80
+#define SERV_PORT 2333
 #define BUFFERSIZE 8096
 
 struct
