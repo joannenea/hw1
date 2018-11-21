@@ -29,12 +29,6 @@ struct {
     {0,0} };
 
 void handle_socket(int fd)
-
-BloggerAds 部落格行銷
-
-BloggerAds 部落格行銷
-
-BloggerAds 部落格行銷
 {
     int j, file_fd, buflen, len;
     long i, ret;
@@ -68,7 +62,6 @@ BloggerAds 部落格行銷
             buffer[i] = 0;
             break;
 
-BloggerAds 部落格行銷
         }
     }
 
