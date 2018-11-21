@@ -12,16 +12,13 @@
 #include <netdb.h>
 #include <arpa/inet.h>
 
-#define SERV_PORT 80 //這個程式原則上需在port 80 listen
-#define BUFFERSIZE 8096
+#define PORT 80 //設定port為80
+#define BUFSIZE 8096
 
-struct
-{
+struct {
 	char *ext;
 	char *filetype;
-}
-extensions [] =
-{
+} extensions [] = {
 	{"gif", "image/gif" },
 	{"jpg", "image/jpeg"},
 	{"jpeg","image/jpeg"},
@@ -32,90 +29,76 @@ extensions [] =
 	{"htm", "text/html" },
 	{"html","text/html" },
 	{"exe","text/plain" },
-	{0,0}
-};
+	{0,0} };
+
+void handle_socket(int fd)
+{
+	int j, file_fd, buflen, len;
+	long i, ret;
+	char * fstr;
+	static char buffer[BUFSIZE+1];
+
+	ret = read(fd,buffer,BUFSIZE); //讀取瀏覽器要求
+
+	if(ret==0||ret==-1) { //連線出現問題，結束行程
+		exit(3);
+	}
+
+	if(ret>0&&ret<BUFSIZE) //處理字串格式(字串結尾)
+		buffer[ret] = 0;
+	else
+		buffer[0] = 0;
+
+	for(i=0;i<ret;i++) 
+		if(buffer[i]=='\r'||buffer[i]=='\n')
+			buffer[i] = 0;
+
+	if(strncmp(buffer,"GET ",4)&&strncmp(buffer,"get ",4)) //判斷是否GET
+		exit(3);
+	
+	for(i=4;i<BUFSIZE;i++) { //隔開"HTTP/1.0"
+		if(buffer[i] == ' ') {
+			buffer[i] = 0;
+			break;
+		}
+	}
+
+	if(!strncmp(&buffer[0],"GET /\0",6)||!strncmp(&buffer[0],"get /\0",6) ) //當客戶端要求根目錄時讀取 index.html
+		strcpy(buffer,"GET /index.html\0");
+
+	buflen = strlen(buffer); //檢查客戶端所要求的檔案格式
+	fstr = (char *)0;
+
+	for(i=0;extensions[i].ext!=0;i++) {
+		len = strlen(extensions[i].ext);
+		if(!strncmp(&buffer[buflen-len], extensions[i].ext, len)) {
+			fstr = extensions[i].filetype;
+			break;
+		}
+	}
+
+	if(fstr == 0) { //檔案格式不支援
+		fstr = extensions[i-1].filetype;
+	}
+
+	if((file_fd=open(&buffer[5],O_RDONLY))==-1) //開檔
+		write(fd, "Failed to open file", 19);
+
+	sprintf(buffer,"HTTP/1.0 200 OK\r\nContent-Type: %s\r\n\r\n", fstr); //回傳200與格式給瀏覽器
+	write(fd,buffer,strlen(buffer));
+
+	while((ret=read(file_fd, buffer, BUFSIZE))>0) { //讀檔並印於客戶端的瀏覽器
+		write(fd,buffer,ret);
+	}
+	
+	exit(1);
+}
 
 void sigchld(int signo)
 {
 	pid_t pid;
-
+	
 	while((pid=waitpid(-1, NULL, WNOHANG))>0);
-}
-
-void handle_socket(int fd)
-{
-    int j, file_fd, buflen, len;
-	long i, ret;
-	char * fstr;
-	static char buffer[BUFFERSIZE+1];
-
-	ret=read(fd,buffer,BUFFERSIZE); //讀取瀏覽器需求
-	if(ret==0 || ret==-1)//連線有問題，結束
-    {
-        exit(3);
-    }
-
-    //處理字串:結尾補0,刪換行
-    if(ret>0 && ret<BUFFERSIZE)
-            buffer[ret]=0;
-    else
-		buffer[0]=0;
-	for(i=0;i<ret;i++)
-    {
-        if(buffer[i]=='\r' || buffer[i]=='\n')
-			buffer[i] = 0;
-    }
-
-    //判斷GET命令
-	if(strncmp(buffer,"GET ",4)&&strncmp(buffer,"get ",4))
-		exit(3);
-
-    //將HTTP/1.0隔開
-	for(i=4;i<BUFFERSIZE;i++)
-    {
-		if(buffer[i]==' ')
-		{
-			buffer[i]=0;
-			break;
-		}
-	}
-
-    //要求根目錄,讀取html
-    if (!strncmp(&buffer[0],"GET /\0",6) || !strncmp(&buffer[0],"get /\0",6) )
-        strcpy(buffer,"GET /index.html\0");
-
-    //檢查客戶端所要求的檔案格式
-	buflen = strlen(buffer);
-	fstr = (char *)0;
-
-	for(i=0;extensions[i].ext!=0;i++)
-    {
-		len=strlen(extensions[i].ext);
-		if(!strncmp(&buffer[buflen-len], extensions[i].ext, len))
-		{
-			fstr=extensions[i].filetype;
-			break;
-		}
-	}
-    //檔案格式不支援
-	if(fstr==0)
-		fstr=extensions[i-1].filetype;
-
-    //開檔
-	if((file_fd=open(&buffer[5],O_RDONLY))==-1)
-		write(fd, "Failed to open file", 19);
-
-    //回傳 200OK 內容格式
-	sprintf(buffer,"HTTP/1.0 200 OK\r\nContent-Type: %s\r\n\r\n", fstr);
-	write(fd,buffer,strlen(buffer));
-
-    //讀檔，輸出到客戶端
-	while((ret=read(file_fd, buffer, BUFFERSIZE))>0)
-    {
-		write(fd,buffer,ret);
-	}
-
-    exit(1);
 }
 
 int main(int argc, char **argv)
@@ -124,54 +107,42 @@ int main(int argc, char **argv)
 	pid_t pid;
 	socklen_t length;
 	struct sockaddr_in cli_addr, serv_addr;
+	
 
-
-    //在背景執行
-	if(fork() != 0)
+	if(fork() != 0) //背景執行
 		return 0;
 
-    //開啟網路socket
-	listenfd = socket(AF_INET, SOCK_STREAM, 0);
-    //網路連線設定
-	bzero(&serv_addr, sizeof(serv_addr));
+
+	listenfd = socket(AF_INET, SOCK_STREAM, 0); //開啟網路socket
+
+	bzero(&serv_addr, sizeof(serv_addr));//接口訊息 網路連線設定
 	serv_addr.sin_family = AF_INET;
-	serv_addr.sin_port = htons(SERV_PORT); //port80
+	serv_addr.sin_port = htons(PORT); //設定為define的port
 	serv_addr.sin_addr.s_addr = htonl(INADDR_ANY); //使用任何在本機的對外IP
-    //開啟網路監聽器
-	bind(listenfd, (struct sockaddr *)&serv_addr, sizeof(serv_addr));
-    //開始監聽
-	listen(listenfd, 64);
+
+	bind(listenfd, (struct sockaddr *)&serv_addr, sizeof(serv_addr)); //開啟網路監聽器
+
+	listen(listenfd, 64); //開始監聽
 
 	signal(SIGCHLD, sigchld);
 
-	while(1)
-    {
+	while(1) {
 		length = sizeof(cli_addr);
-    //等待客戶端連線
-		if((socketfd = accept(listenfd, (struct sockaddr *)&cli_addr, &length))<0)
+
+		if((socketfd = accept(listenfd, (struct sockaddr *)&cli_addr, &length))<0) //accept:等待客戶端連線
 			exit(3);
 
-    //fork()子行程
-		if((pid = fork()) < 0)
-        {
+		if((pid = fork()) < 0) { //執行fork() 分出子行程
 			exit(3);
-		}
-		else
-        {
-			if(pid == 0) //子
-			{
+		}else {
+			if(pid == 0) { //此為子行程
 				close(listenfd);
 				handle_socket(socketfd);
 				exit(0);
-			}
-            else //父
-            {
+			}else { //此為父行程
 				close(socketfd);
 			}
 		}
 	}
 	return 0;
 }
-
-
-
